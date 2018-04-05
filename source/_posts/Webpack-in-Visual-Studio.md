@@ -40,7 +40,6 @@ tags: webpack vs visual stuio
 解决办法如下：
 1. 使用上面提到的`assets-webpack-plugin`插件，可以在构建时，生成filename与filename-chunkhash的映射关系。并将这个映射关系保存下来,这样就可以读取这个文件，以类似反射的方式加载
 2. 为了这个问题还去研究了一下msbuild，最终通过自己手动复制的方式实现
-
 ## 自动反射业务js文件
 考虑到如果需要每次新增一个js文件，都要去修改webpack.config.js的入口(`entry`)未免有点麻烦,于是考虑也用类似反射的思路，来读取用来存放业务js代码的文件夹，把每个".js"都作为入口文件的一个对象:
 ``` javascript
@@ -50,80 +49,58 @@ var readFile = function (path) {
     var jsFiles = files.filter((f) => {
         return f.endsWith('.js');
     });
-
     var ret = {};
     jsFiles.forEach(function (item) {
         var temp = item.substring(item, item.indexOf(".js"));
         ret[temp] = "./" + SOURCE_DIRECTORY + "/" + item;
-
     });
     return ret;
 };
-
 ```
 最终生成出来的样子如下所示：
 ```
 // entry: {
 //   wp:[ './app/webpack.js'] // 独立的业务文件
-
 // }, // 入口文件定义
 ```
-
-
 ## 举个栗子
-
 最终的`webpack.config.js`文件应该长这样：
 ``` javascript
 'use strict';
-
 const AssetsPlugin = require('assets-webpack-plugin'); // 将每个资源文件的原生filename和chunkhashname一一对应起来的插件
 const CleanPlugin = require('clean-webpack-plugin'); // 清空目录的插件
 const path = require('path'); // 顾名思义，路径相关操作的插件
 const webpack = require('webpack'); // 主角，webpack
 const pkg = require('./package'); // package.json
 var WebpackNotifierPlugin = require('webpack-notifier');
-
 const SCRIPTS_ROOT = 'Content/Scripts/';
 const SOURCE_DIRECTORY = 'app'; // 业务文件名
 const BUILD_DIRECTORY = 'build'; // 构建目录名
 const BUILD_DROP_PATH = path.join(__dirname, SCRIPTS_ROOT, BUILD_DIRECTORY);
 //const BUILD_DROP_PATH = path.resolve(__dirname, BUILD_DIRECTORY); // 构建全路径
 const WEB_ROOT = path.join(__dirname, SCRIPTS_ROOT); // 当前上下文
-
-
 const CHUNK_FILE_NAME = '[name].[chunkhash].js';
-
 var readFile = function (path) {
     var fs = require('fs');
     var files = fs.readdirSync('./' + path);
     var jsFiles = files.filter((f) => {
         return f.endsWith('.js');
     });
-
     var ret = {};
     jsFiles.forEach(function (item) {
         var temp = item.substring(item, item.indexOf(".js"));
         ret[temp] = "./" + SOURCE_DIRECTORY + "/" + item;
-
     });
     return ret;
 };
-
-
 var webpackEntry = readFile(path.join(SCRIPTS_ROOT, SOURCE_DIRECTORY));
-
 console.log(webpackEntry);
-
 const config = {
-
     context: WEB_ROOT, // 声明上下文
-
     // entry: {
     //   wp:[ './app/webpack.js'] // 独立的业务文件
-
     // }, // 入口文件定义
     entry: webpackEntry,
-
     module: {
         loaders: [
         {
@@ -144,23 +121,18 @@ const config = {
        }
         ]
     }, // 使用babel编译js
-
-
     output: {
         path: BUILD_DROP_PATH,
         filename: CHUNK_FILE_NAME,
         chunkFilename: CHUNK_FILE_NAME
     }, // 输出
-
     plugins: [
     new AssetsPlugin({
         filename: 'webpack.assets.json',
         path: BUILD_DROP_PATH,
         prettyPrint: true
     }), // 将filename 和 filename.chunkhash对应起来
-
     new CleanPlugin(BUILD_DROP_PATH), // 构建前先清空文件夹
-
     new webpack.optimize.UglifyJsPlugin({
         compress: {
             warnings: false
@@ -169,18 +141,13 @@ const config = {
             comments: false
         }
     }), // 压缩混淆
-
     new WebpackNotifierPlugin(), // 通知结果
     ],
 };
-
 module.exports = config;
 ```
-
 到目前为止，webpack能做的事就结束了，接下来.net怎么配合呢？
-
 ## cshtml页面引用
-
 前面提到了，编译出来的js文件名是含有chunkhash值的，于是最理想的使用方法就是在开发过程中感觉不到变化，还是像之前一样，只需要写"filename"就可以引入含有"chunkhash值"的编译后的js文件。
 做法如下：
 首先，扩展一下UrlHelper：
@@ -192,7 +159,6 @@ module.exports = config;
             JObject webpackAssetsJson = null;
             var applicationBasePath = System.AppDomain.CurrentDomain.BaseDirectory;
             string packageJsonFilePath = $"{applicationBasePath}\\{"package.json"}";
-
             using (StreamReader packageJsonFile = File.OpenText(packageJsonFilePath))
             {
                 using (JsonTextReader packageJsonReader = new JsonTextReader(packageJsonFile))
@@ -202,7 +168,6 @@ module.exports = config;
                     string webpackAssetsFileName = webpackConfigJson["assetsFileName"].Value<string>();
                     string webpackBuildDirectory = webpackConfigJson["buildDirectory"].Value<string>();
                     string webpackAssetsFilePath = $"{applicationBasePath}\\{webpackBuildDirectory}\\{webpackAssetsFileName}";
-
                     using (StreamReader webpackAssetsFile = File.OpenText(webpackAssetsFilePath))
                     {
                         using (JsonTextReader webpackAssetsReader = new JsonTextReader(webpackAssetsFile))
@@ -211,7 +176,6 @@ module.exports = config;
                         }
                     }
                     return "~/" + webpackBuildDirectory + webpackAssetsJson.SelectToken(fileName).Value<string>("js");
-
                 }
             }
         }
@@ -223,12 +187,10 @@ module.exports = config;
  <script type="text/javascript" src="@Url.Content(@Url.GetResourceUrlHashChunk("webpack"))"></script>
  ```
  注：webpack是我这个js的名称
-
  ## 发布问题
  事情到这里还没有结束，在发布时又发生了状况，那就是这些编译后的文件由于是动态生成的，无法包入项目文件，因此也就不会复制的发布目录中，解决方法如下：
-
  在项目根目录下的`Properties\PublishProfiles`文件夹中，会保存发布的配置文件，由于visual studio是使用MSBuild进行编译发布的，因此在对MSbuild略加研究之后，`pubxml`的内容如下：
- ``` 
+ ```
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 您 Web 项目的发布/打包进程将使用此文件。您可以通过编辑此 MSBuild 文件
@@ -268,10 +230,7 @@ module.exports = config;
     </Copy>
   </Target>
 </Project>
-
  ```
-
-
  ## vs2015 webpack task runner 插件
  在vs2015里还可以直接安装webpack task runner 插件来使用
  如图所示，还可以将webpack脚本和生成事件绑定起来了。
@@ -280,16 +239,7 @@ module.exports = config;
  ![plugin1](webpack task runner.png)
  ![plugin2](webpack task runner2.png)
  ![plugin3](webpack task runner3.png)
-
-
  # 小结
-
  其实还有很多可以优化的地方，比如第三方库，css等，但是目前已经可以满足初步需求了。接下来再做进一步的优化。
-
-
-
  # 栗子
  [栗子](https://github.com/liu-zhuang/webpack-vs/)
-
-
- 
